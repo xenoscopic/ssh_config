@@ -7,9 +7,9 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
+	"time"
 )
 
 type (
@@ -19,14 +19,14 @@ type (
 		Hosts   []*Host
 	}
 	Host struct {
-		Comments []string
-		Hostname string
-		Params   []*Param
+		Comments  []string
+		Hostnames []string
+		Params    []*Param
 	}
 	Param struct {
 		Comments []string
 		Keyword  string
-		Args     string
+		Args     []string
 	}
 )
 
@@ -122,14 +122,14 @@ const (
 	HostConfigurationHeader   = "# host-based configuration"
 )
 
-func NewHost(hostname string, comments []string) *Host {
+func NewHost(hostnames []string, comments []string) *Host {
 	return &Host{
-		Comments: comments,
-		Hostname: hostname,
+		Comments:  comments,
+		Hostnames: hostnames,
 	}
 }
 
-func NewParam(keyword string, args string, comments []string) *Param {
+func NewParam(keyword string, args []string, comments []string) *Param {
 	return &Param{
 		Comments: comments,
 		Keyword:  keyword,
@@ -177,15 +177,15 @@ func Parse(r io.Reader) (*Config, error) {
 		}
 
 		psc := bufio.NewScanner(strings.NewReader(line))
-		psc.Split(scanParts)
+		psc.Split(bufio.ScanWords)
 		if !psc.Scan() {
 			continue
 		}
 
 		param.Keyword = psc.Text()
 
-		if psc.Scan() {
-			param.Args = psc.Text()
+		for psc.Scan() {
+			param.Args = append(param.Args, psc.Text())
 		}
 
 		if param.Keyword == HostKeyword {
@@ -194,8 +194,8 @@ func Parse(r io.Reader) (*Config, error) {
 				config.Hosts = append(config.Hosts, host)
 			}
 			host = &Host{
-				Comments: param.Comments,
-				Hostname: param.Args,
+				Comments:  param.Comments,
+				Hostnames: param.Args,
 			}
 			param = &Param{}
 			continue
@@ -220,32 +220,6 @@ func Parse(r io.Reader) (*Config, error) {
 
 }
 
-func scanParts(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	// Skip leading spaces and double quotes.
-	start := 0
-	for width := 0; start < len(data); start += width {
-		var r rune
-		r, width = utf8.DecodeRune(data[start:])
-		if !unicode.IsSpace(r) || r == '"' {
-			break
-		}
-	}
-	// Scan until space or double quote, marking end of word.
-	for width, i := 0, start; i < len(data); i += width {
-		var r rune
-		r, width = utf8.DecodeRune(data[i:])
-		if unicode.IsSpace(r) || r == '"' {
-			return i + width, data[start:i], nil
-		}
-	}
-	// If we're at EOF, we have a final, non-empty, non-terminated word. Return it.
-	if atEOF && len(data) > start {
-		return len(data), data[start:], nil
-	}
-	// Request more data.
-	return start, nil, nil
-}
-
 func (config *Config) WriteTo(w io.Writer) error {
 
 	fmt.Fprintln(w, FileHeader)
@@ -255,32 +229,30 @@ func (config *Config) WriteTo(w io.Writer) error {
 	for _, param := range config.Globals {
 		if len(param.Comments) > 0 {
 			fmt.Fprintln(w)
-		}
-		for _, comment := range param.Comments {
-			if !strings.HasPrefix(comment, "#") {
-				comment = "# " + comment
+			for _, comment := range param.Comments {
+				if !strings.HasPrefix(comment, "#") {
+					comment = "# " + comment
+				}
+				fmt.Fprintln(w, comment)
 			}
-			fmt.Fprintln(w, comment)
 		}
-		fmt.Fprintf(w, "%s %s\n", param.Keyword, param.Args)
+		fmt.Fprintf(w, "%s %s\n", param.Keyword, strings.Join(param.Args, " "))
 	}
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, HostConfigurationHeader)
 
 	for _, host := range config.Hosts {
+		fmt.Fprintln(w)
 		if len(host.Comments) > 0 {
-			fmt.Fprintln(w)
 			for _, comment := range host.Comments {
 				if !strings.HasPrefix(comment, "#") {
 					comment = "# " + comment
 				}
 				fmt.Fprintln(w, comment)
 			}
-		} else {
-			fmt.Fprintln(w)
 		}
-		fmt.Fprintf(w, "%s %s\n", HostKeyword, host.Hostname)
+		fmt.Fprintf(w, "%s %s\n", HostKeyword, strings.Join(host.Hostnames, " "))
 		for _, param := range host.Params {
 			for _, comment := range param.Comments {
 				if !strings.HasPrefix(comment, "#") {
@@ -288,33 +260,38 @@ func (config *Config) WriteTo(w io.Writer) error {
 				}
 				fmt.Fprintln(w, comment)
 			}
-			fmt.Fprintf(w, "  %s %s\n", param.Keyword, param.Args)
+			fmt.Fprintf(w, "  %s %s\n", param.Keyword, strings.Join(param.Args, " "))
 		}
 	}
 
 	return nil
 }
 
-func (config *Config) WriteToFile(file *os.File) error {
+func (config *Config) WriteToFilepath(file_path string) error {
 
-	if err := file.Truncate(0); err != nil {
-		// for some reason the error is generic here and sniffing the trace
-		// has shown likely causes, including in error for possible quick fixing.
-		if strings.Contains(err.Error(), "invalid argument") {
-			return fmt.Errorf("%s, possible cause (file permissions or opened as read-only)", err)
-		}
+	// create a tmp file in the same path with the same mode
+	tmp_file_path := file_path + "." + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	stat, err := os.Stat(file_path)
+	if err != nil {
 		return err
 	}
 
-	if _, err := file.Seek(0, 0); err != nil {
+	file, err := os.OpenFile(tmp_file_path, os.O_CREATE|os.O_WRONLY|os.O_EXCL|os.O_SYNC, stat.Mode())
+	if err != nil {
 		return err
 	}
 
 	if err := config.WriteTo(file); err != nil {
-		err = fmt.Errorf("WriteTo err: %s (rolling back...)", err)
-		if _, rollbackErr := file.Write(config.Source); rollbackErr != nil {
-			err = fmt.Errorf("%s, Rollback err: %s\nOriginal Source:\n\n%s", err, rollbackErr, config.Source)
-		}
+		file.Close()
+		return err
+	}
+
+	if err := file.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmp_file_path, file_path); err != nil {
 		return err
 	}
 
@@ -333,8 +310,10 @@ func (config *Config) GetParam(keyword string) *Param {
 
 func (config *Config) GetHost(hostname string) *Host {
 	for _, host := range config.Hosts {
-		if host.Hostname == hostname {
-			return host
+		for _, hn := range host.Hostnames {
+			if hn == hostname {
+				return host
+			}
 		}
 	}
 	return nil

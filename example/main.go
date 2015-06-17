@@ -11,39 +11,32 @@ func main() {
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	// ensure file is opened for read/write
-	file, err := os.OpenFile(os.ExpandEnv("$HOME/.ssh/config"), os.O_RDWR, 0600)
+	ssh_config_file := os.ExpandEnv("$HOME/.ssh/config")
+
+	file, err := os.Open(ssh_config_file)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
 
 	config, err := ssh_config.Parse(file)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	file.Close()
+
 	// modify by reference for existing params
 	// or create a new param and append it to global
 	if param := config.GetParam(ssh_config.VisualHostKeyKeyword); param != nil {
-		param.Args = "yes"
+		param.Args = []string{"yes"}
 	} else {
-		param = ssh_config.NewParam(ssh_config.VisualHostKeyKeyword, "yes", []string{"good to see you"})
+		param = ssh_config.NewParam(ssh_config.VisualHostKeyKeyword, []string{"yes"}, []string{"good to see you"})
 		config.Globals = append(config.Globals, param)
 	}
 
-	// grab host by name and set param
-	if host := config.GetHost("dev"); host != nil {
-		if param := host.GetParam(ssh_config.UserKeyword); param != nil {
-			param.Args = "ubuntu"
-		} else {
-			param = ssh_config.NewParam(ssh_config.UserKeyword, "ubuntu", nil)
-			host.Params = append(host.Params, param)
-		}
-	}
-
-	// write to file with built-in fallback to original source on error
-	if err := config.WriteToFile(file); err != nil {
+	// atomic write to file to ensure config is preserved in
+	// the event of an error
+	if err := config.WriteToFilepath(ssh_config_file); err != nil {
 		log.Fatal(err)
 	}
 

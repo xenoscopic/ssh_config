@@ -20,6 +20,9 @@ Host dev
   HostName 127.0.0.1
   User ubuntu
   Port 22
+
+Host *.google.com *.yahoo.com
+  User root
 `
 )
 
