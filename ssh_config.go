@@ -129,12 +129,55 @@ func NewHost(hostnames []string, comments []string) *Host {
 	}
 }
 
+func (host *Host) String() string {
+
+	buf := &bytes.Buffer{}
+
+	fmt.Fprintln(buf)
+	if len(host.Comments) > 0 {
+		for _, comment := range host.Comments {
+			if !strings.HasPrefix(comment, "#") {
+				comment = "# " + comment
+			}
+			fmt.Fprintln(buf, comment)
+		}
+	}
+
+	fmt.Fprintf(buf, "%s %s\n", HostKeyword, strings.Join(host.Hostnames, " "))
+	for _, param := range host.Params {
+		fmt.Fprint(buf, "  ", param.String())
+	}
+
+	return buf.String()
+
+}
+
 func NewParam(keyword string, args []string, comments []string) *Param {
 	return &Param{
 		Comments: comments,
 		Keyword:  keyword,
 		Args:     args,
 	}
+}
+
+func (param *Param) String() string {
+
+	buf := &bytes.Buffer{}
+
+	if len(param.Comments) > 0 {
+		fmt.Fprintln(buf)
+		for _, comment := range param.Comments {
+			if !strings.HasPrefix(comment, "#") {
+				comment = "# " + comment
+			}
+			fmt.Fprintln(buf, comment)
+		}
+	}
+
+	fmt.Fprintf(buf, "%s %s\n", param.Keyword, strings.Join(param.Args, " "))
+
+	return buf.String()
+
 }
 
 func Parse(r io.Reader) (*Config, error) {
@@ -227,41 +270,14 @@ func (config *Config) WriteTo(w io.Writer) error {
 	fmt.Fprintln(w, GlobalConfigurationHeader)
 
 	for _, param := range config.Globals {
-		if len(param.Comments) > 0 {
-			fmt.Fprintln(w)
-			for _, comment := range param.Comments {
-				if !strings.HasPrefix(comment, "#") {
-					comment = "# " + comment
-				}
-				fmt.Fprintln(w, comment)
-			}
-		}
-		fmt.Fprintf(w, "%s %s\n", param.Keyword, strings.Join(param.Args, " "))
+		fmt.Fprint(w, param.String())
 	}
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, HostConfigurationHeader)
 
 	for _, host := range config.Hosts {
-		fmt.Fprintln(w)
-		if len(host.Comments) > 0 {
-			for _, comment := range host.Comments {
-				if !strings.HasPrefix(comment, "#") {
-					comment = "# " + comment
-				}
-				fmt.Fprintln(w, comment)
-			}
-		}
-		fmt.Fprintf(w, "%s %s\n", HostKeyword, strings.Join(host.Hostnames, " "))
-		for _, param := range host.Params {
-			for _, comment := range param.Comments {
-				if !strings.HasPrefix(comment, "#") {
-					comment = "# " + comment
-				}
-				fmt.Fprintln(w, comment)
-			}
-			fmt.Fprintf(w, "  %s %s\n", param.Keyword, strings.Join(param.Args, " "))
-		}
+		fmt.Fprint(w, host.String())
 	}
 
 	return nil
