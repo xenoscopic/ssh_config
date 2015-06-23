@@ -358,8 +358,8 @@ func (config *Config) FindByHostname(hostname string) *Host {
 				return host
 			}
 		}
-		if hns := host.GetParam(HostNameKeyword); hn != nil {
-			for _, hn := range hns {
+		if hns := host.GetParam(HostNameKeyword); hns != nil {
+			for _, hn := range hns.Args {
 				if hn == hostname {
 					return host
 				}
