@@ -180,6 +180,13 @@ func (param *Param) String() string {
 
 }
 
+func (param *Param) Value() string {
+	if len(param.Args) > 0 {
+		return param.Args[0]
+	}
+	return ""
+}
+
 func Parse(r io.Reader) (*Config, error) {
 
 	// dat state
@@ -339,6 +346,24 @@ func (host *Host) GetParam(keyword string) *Param {
 	for _, param := range host.Params {
 		if param.Keyword == keyword {
 			return param
+		}
+	}
+	return nil
+}
+
+func (config *Config) FindByHostname(hostname string) *Host {
+	for _, host := range config.Hosts {
+		for _, hn := range host.Hostnames {
+			if hn == hostname {
+				return host
+			}
+		}
+		if hns := host.GetParam(HostNameKeyword); hn != nil {
+			for _, hn := range hns {
+				if hn == hostname {
+					return host
+				}
+			}
 		}
 	}
 	return nil
