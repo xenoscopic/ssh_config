@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"os/user"
 )
 
 type (
@@ -76,6 +77,7 @@ const (
 	IdentityFileKeyword                     = "IdentityFile"
 	IgnoreUnknownKeyword                    = "IgnoreUnknown"
 	IPQoSKeyword                            = "IPQoS"
+	IncludeKeyword                          = "Include"
 	KbdInteractiveAuthenticationKeyword     = "KbdInteractiveAuthentication"
 	KbdInteractiveDevicesKeyword            = "KbdInteractiveDevices"
 	KexAlgorithmsKeyword                    = "KexAlgorithms"
@@ -248,6 +250,33 @@ func Parse(r io.Reader) (*Config, error) {
 				Hostnames: param.Args,
 			}
 			param = &Param{}
+			continue
+		} else if param.Keyword == IncludeKeyword {
+			global = false
+			whoAmI, _ := user.Current()
+			path := strings.Join(param.Args, "")
+			path = strings.Replace(path, "~", whoAmI.HomeDir, 1)
+			dir := strings.Split(path, "*")[0]
+			files, _ := ioutil.ReadDir(dir)
+
+			for i := range files {
+				info := files[i]
+				file := dir + info.Name()
+				dat, _ := ioutil.ReadFile(file)
+				s := string(dat)
+				subConfig, _ := Parse(strings.NewReader(s))
+				subHosts := subConfig.Hosts
+				for ii := range subHosts {
+					if subHosts[ii] != nil {
+						config.Hosts = append(config.Hosts, &Host{
+							Comments:  subHosts[ii].Comments,
+							Hostnames: subHosts[ii].Hostnames,
+							Params:    subHosts[ii].Params,
+						})
+					}
+				}
+			}
+
 			continue
 		} else if global {
 			config.Globals = append(config.Globals, param)
