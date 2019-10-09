@@ -24,6 +24,18 @@ Host dev
 Host *.google.com *.yahoo.com
   User root
 `
+
+	ssh_config_example_no_headers = `VisualHostKey yes
+
+# dev
+Host dev
+  HostName 127.0.0.1
+  User ubuntu
+  Port 22
+
+Host *.google.com *.yahoo.com
+  User root
+`
 )
 
 func TestParseAndWriteTo(t *testing.T) {
@@ -35,12 +47,43 @@ func TestParseAndWriteTo(t *testing.T) {
 
 	buf := &bytes.Buffer{}
 
-	config.WriteTo(buf)
+	config.WriteTo(buf, nil)
 
 	if buf.String() != ssh_config_example {
 
-		fmt.Println(ssh_config_example, "====")
-		fmt.Println(buf.String(), "====")
+		fmt.Println("==== expected")
+		fmt.Println(ssh_config_example)
+		fmt.Println("==== actual")
+		fmt.Println(buf.String())
+		fmt.Println("====")
+
+		t.Errorf("input output mismatch")
+	}
+
+}
+
+func TestParseAndWriteToNoHeaders(t *testing.T) {
+
+	config, err := Parse(strings.NewReader(ssh_config_example))
+	if err != nil {
+		t.Error(err)
+	}
+
+	buf := &bytes.Buffer{}
+
+	config.WriteTo(buf, &SaveOptions{
+		FileHeader:                false,
+		GlobalConfigurationHeader: false,
+		HostConfigurationHeader:   false,
+	})
+
+	if buf.String() != ssh_config_example_no_headers {
+
+		fmt.Println("==== expected")
+		fmt.Println(ssh_config_example_no_headers)
+		fmt.Println("==== actual")
+		fmt.Println(buf.String())
+		fmt.Println("====")
 
 		t.Errorf("input output mismatch")
 	}

@@ -28,6 +28,12 @@ type (
 		Keyword  string
 		Args     []string
 	}
+
+	SaveOptions struct {
+		FileHeader                bool
+		GlobalConfigurationHeader bool
+		HostConfigurationHeader   bool
+	}
 )
 
 const (
@@ -122,6 +128,10 @@ const (
 	HostConfigurationHeader   = "# host-based configuration"
 )
 
+var (
+	defaultSaveOptions = &SaveOptions{FileHeader: true, GlobalConfigurationHeader: true, HostConfigurationHeader: true}
+)
+
 func NewHost(hostnames []string, comments []string) *Host {
 	return &Host{
 		Comments:  comments,
@@ -133,7 +143,6 @@ func (host *Host) String() string {
 
 	buf := &bytes.Buffer{}
 
-	fmt.Fprintln(buf)
 	if len(host.Comments) > 0 {
 		for _, comment := range host.Comments {
 			if !strings.HasPrefix(comment, "#") {
@@ -270,34 +279,57 @@ func Parse(r io.Reader) (*Config, error) {
 
 }
 
-func (config *Config) WriteTo(w io.Writer) error {
+func (config *Config) WriteTo(w io.Writer, opt *SaveOptions) error {
+	if opt == nil {
+		opt = defaultSaveOptions
+	}
 
-	fmt.Fprintln(w, FileHeader)
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, GlobalConfigurationHeader)
+	if opt.FileHeader {
+		fmt.Fprintln(w, FileHeader)
+		fmt.Fprintln(w)
+	}
+
+	if opt.GlobalConfigurationHeader {
+		fmt.Fprintln(w, GlobalConfigurationHeader)
+	}
 
 	for _, param := range config.Globals {
 		fmt.Fprint(w, param.String())
 	}
 
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, HostConfigurationHeader)
+	if len(config.Globals) > 0 {
+		fmt.Fprintln(w)
+	}
 
-	for _, host := range config.Hosts {
+	if opt.HostConfigurationHeader {
+		fmt.Fprintln(w, HostConfigurationHeader)
+	}
+
+	for i, host := range config.Hosts {
+		if i == 0 {
+			if opt.HostConfigurationHeader {
+				fmt.Fprintln(w)
+			}
+		} else {
+			fmt.Fprintln(w)
+		}
+
 		fmt.Fprint(w, host.String())
 	}
 
 	return nil
 }
 
-func (config *Config) WriteToFilepath(file_path string) error {
+func (config *Config) WriteToFilepath(file_path string, opt *SaveOptions) error {
 
 	// create a tmp file in the same path with the same mode
 	tmp_file_path := file_path + "." + strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	stat, err := os.Stat(file_path)
 	if err != nil {
-		return err
+		if !os.IsNotExist(err) {
+			return err
+		}
 	}
 
 	file, err := os.OpenFile(tmp_file_path, os.O_CREATE|os.O_WRONLY|os.O_EXCL|os.O_SYNC, stat.Mode())
@@ -305,7 +337,7 @@ func (config *Config) WriteToFilepath(file_path string) error {
 		return err
 	}
 
-	if err := config.WriteTo(file); err != nil {
+	if err := config.WriteTo(file, opt); err != nil {
 		file.Close()
 		return err
 	}
