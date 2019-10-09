@@ -326,13 +326,19 @@ func (config *Config) WriteToFilepath(file_path string, opt *SaveOptions) error 
 	tmp_file_path := file_path + "." + strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	stat, err := os.Stat(file_path)
+	var mode os.FileMode
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
 		}
+
+		// default for ssh_config
+		mode = 600
+	} else {
+		mode = stat.Mode()
 	}
 
-	file, err := os.OpenFile(tmp_file_path, os.O_CREATE|os.O_WRONLY|os.O_EXCL|os.O_SYNC, stat.Mode())
+	file, err := os.OpenFile(tmp_file_path, os.O_CREATE|os.O_WRONLY|os.O_EXCL|os.O_SYNC, mode)
 	if err != nil {
 		return err
 	}

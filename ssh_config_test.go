@@ -3,8 +3,11 @@ package ssh_config
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
+	"path/filepath"
 )
 
 var (
@@ -37,6 +40,45 @@ Host *.google.com *.yahoo.com
   User root
 `
 )
+
+func TestWriteToPath(t *testing.T) {
+	config, err := Parse(strings.NewReader(ssh_config_example))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := ioutil.TempFile("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer os.Remove(f.Name())
+
+	if err := config.WriteToFilepath(f.Name(), nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWriteToNewFile(t *testing.T) {
+	config, err := Parse(strings.NewReader(ssh_config_example))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	d, err := ioutil.TempDir("","")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer os.RemoveAll(d)
+	path := filepath.Join(d, "config")
+
+	if err := config.WriteToFilepath(path, nil); err != nil {
+		t.Fatal(err)
+	}
+
+
+}
 
 func TestParseAndWriteTo(t *testing.T) {
 
